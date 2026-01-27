@@ -23,7 +23,7 @@ jobs:
                 break
             fi      
         done
-        for VAR in 6411 6412 6413
+        for VAR in 6511 6512 6513
         do
             if (echo $TITLE | grep -iqF "$VAR" ); then
                 echo "GROUP=$VAR" >> "$GITHUB_ENV"
