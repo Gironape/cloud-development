@@ -11,11 +11,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.AppHost" Version="9.3.1" />
+    <PackageReference Include="Aspire.Hosting" Version="13.1.1" />
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="13.1.1" />
+    <PackageReference Include="Aspire.Hosting.Redis" Version="13.1.1" />
+    <PackageReference Include="Aspire.StackExchange.Redis.DistributedCaching" Version="13.1.1" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Client.Wasm\Client.Wasm.csproj" />
     <ProjectReference Include="..\CompanyEmployee.Api\CompanyEmployee.Api.csproj" />
+    <ProjectReference Include="..\CompanyEmployee.Domain\CompanyEmployee.Domain.csproj" />
+    <ProjectReference Include="..\CompanyEmployee.ServiceDefaults\CompanyEmployee.ServiceDefaults.csproj" />
   </ItemGroup>
 
 </Project>
