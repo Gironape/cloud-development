@@ -24,7 +24,7 @@ public class EmployeeGenerator : IEmployeeGenerator
         if (seed.HasValue)
             Randomizer.Seed = new Random(seed.Value);
 
-        var faker = new Faker();
+        var faker = new Faker("ru");
 
         var gender = faker.PickRandom<Bogus.DataSets.Name.Gender>();
         var firstName = faker.Name.FirstName(gender);
