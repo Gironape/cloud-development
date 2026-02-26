@@ -1,10 +1,10 @@
 ﻿using CompanyEmployee.Api.Services;
+using CompanyEmployee.ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 builder.AddRedisDistributedCache("redis");
-
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -20,6 +20,7 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddSingleton<IEmployeeGenerator, EmployeeGenerator>();
+builder.Services.AddSingleton<ICacheService, RedisCacheService>();
 builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 
 var app = builder.Build();
@@ -35,5 +36,4 @@ app.UseHttpsRedirection();
 app.UseCors("wasm");
 app.UseAuthorization();
 app.MapControllers();
-
 app.Run();

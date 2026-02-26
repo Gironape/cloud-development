@@ -7,28 +7,49 @@ namespace CompanyEmployee.Api.Controllers;
 /// <summary>
 /// Контроллер для работы с сотрудниками.
 /// </summary>
+/// <param name="employeeService">Сервис для получения сотрудников с кэшированием.</param>
+/// <param name="logger">Логгер для записи информации о запросах.</param>
 [ApiController]
 [Route("api/[controller]")]
-public class EmployeeController : ControllerBase
+public class EmployeeController(
+    IEmployeeService employeeService,
+    ILogger<EmployeeController> logger) : ControllerBase
 {
-    private readonly IEmployeeService _employeeService;
-    private readonly ILogger<EmployeeController> _logger;
-
-    public EmployeeController(IEmployeeService employeeService, ILogger<EmployeeController> logger)
-    {
-        _employeeService = employeeService;
-        _logger = logger;
-    }
-
     /// <summary>
-    /// Получить сгенерированного сотрудника.
+    /// Получить сотрудника по идентификатору.
     /// </summary>
+    /// <param name="id">Идентификатор сотрудника.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Объект сотрудника.</returns>
     [HttpGet]
     [ProducesResponseType(typeof(Employee), StatusCodes.Status200OK)]
-    public async Task<ActionResult<Employee>> GetEmployee(int? seed, CancellationToken cancellationToken)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<Employee>> GetEmployee(int id, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Запрос на получение сотрудника с seed: {Seed}", seed);
-        var employee = await _employeeService.GetEmployeeAsync(seed, cancellationToken);
-        return Ok(employee);
+        try
+        {
+            logger.LogInformation("Запрос на получение сотрудника с id: {Id}", id);
+
+            if (id <= 0)
+            {
+                return BadRequest("ID должен быть положительным числом");
+            }
+
+            var employee = await employeeService.GetEmployeeAsync(id, cancellationToken);
+
+            if (employee == null)
+            {
+                return NotFound($"Сотрудник с ID {id} не найден");
+            }
+
+            return Ok(employee);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ошибка при получении сотрудника с id: {Id}", id);
+            return StatusCode(500, "Внутренняя ошибка сервера");
+        }
     }
 }

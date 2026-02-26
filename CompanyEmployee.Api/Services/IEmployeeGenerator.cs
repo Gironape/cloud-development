@@ -2,10 +2,15 @@
 
 namespace CompanyEmployee.Api.Services;
 
+/// <summary>
+/// Генератор данных сотрудников.
+/// </summary>
 public interface IEmployeeGenerator
 {
     /// <summary>
-    /// Генерирует нового сотрудника.
+    /// Генерирует сотрудника по идентификатору.
     /// </summary>
-    public Employee Generate(int? seed = null);
+    /// <param name="id">Идентификатор.</param>
+    /// <returns>Сгенерированный сотрудник.</returns>
+    public Employee Generate(int id);
 }

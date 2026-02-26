@@ -1,54 +1,40 @@
 ﻿using CompanyEmployee.Domain.Entity;
 using Microsoft.Extensions.Caching.Distributed;
-using System.Text.Json;
 
 namespace CompanyEmployee.Api.Services;
 
 /// <summary>
-/// Реализация сервиса сотрудников с кэшированием в Redis через IDistributedCache.
+/// Бизнес-логика работы с сотрудниками.
 /// </summary>
-public class EmployeeService : IEmployeeService
+/// <param name="generator">Генератор сотрудников.</param>
+/// <param name="cache">Сервис кэширования.</param>
+/// <param name="logger">Логгер.</param>
+public class EmployeeService(
+    IEmployeeGenerator generator,
+    ICacheService cache,
+    ILogger<EmployeeService> logger) : IEmployeeService
 {
-    private readonly IEmployeeGenerator _generator;
-    private readonly IDistributedCache _cache;
-    private readonly ILogger<EmployeeService> _logger;
-    private readonly DistributedCacheEntryOptions _cacheOptions;
-
-    public EmployeeService(IEmployeeGenerator generator, IDistributedCache cache, ILogger<EmployeeService> logger)
+    private readonly DistributedCacheEntryOptions _cacheOptions = new()
     {
-        _generator = generator;
-        _cache = cache;
-        _logger = logger;
-        _cacheOptions = new DistributedCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
-        };
-    }
+        AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
+    };
 
-    /// <summary>
-    /// Получает сотрудника.
-    /// </summary>
-    public async Task<Employee> GetEmployeeAsync(int? seed, CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    public async Task<Employee?> GetEmployeeAsync(int id, CancellationToken cancellationToken = default)
     {
-        var cacheKey = seed.HasValue ? $"employee:seed:{seed}" : $"employee:random:{Guid.NewGuid()}";
-
-        _logger.LogDebug("Попытка получения сотрудника из кэша по ключу {CacheKey}", cacheKey);
-
-        var cachedJson = await _cache.GetStringAsync(cacheKey, cancellationToken);
-        if (cachedJson != null)
+        var cacheKey = $"employee:{id}";
+        var employee = await cache.GetAsync<Employee>(cacheKey, cancellationToken);
+        if (employee != null)
         {
-            _logger.LogInformation("Сотрудник найден в кэше по ключу {CacheKey}", cacheKey);
-            var employee = JsonSerializer.Deserialize<Employee>(cachedJson);
-            return employee!;
+            logger.LogInformation("Сотрудник с ID {Id} найден в кэше", id);
+            return employee;
         }
 
-        _logger.LogInformation("Сотрудник не найден в кэше, генерация нового. Seed: {Seed}", seed);
-        var newEmployee = _generator.Generate(seed);
+        logger.LogInformation("Сотрудник с ID {Id} не найден в кэше, генерация нового", id);
+        employee = generator.Generate(id);
 
-        var serialized = JsonSerializer.Serialize(newEmployee);
-        await _cache.SetStringAsync(cacheKey, serialized, _cacheOptions, cancellationToken);
-        _logger.LogDebug("Сгенерированный сотрудник сохранён в кэш по ключу {CacheKey}", cacheKey);
+        await cache.SetAsync(cacheKey, employee, _cacheOptions, cancellationToken);
 
-        return newEmployee;
+        return employee;
     }
 }
