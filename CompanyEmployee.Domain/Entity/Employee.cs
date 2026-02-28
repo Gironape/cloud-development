@@ -1,5 +1,8 @@
 ﻿namespace CompanyEmployee.Domain.Entity;
 
+/// <summary>
+/// Представляет сотрудника компании со всеми характеристиками.
+/// </summary>
 public class Employee
 {
     /// <summary>
