@@ -3,6 +3,9 @@ using Amazon.S3.Model;
 
 namespace CompanyEmployee.FileService.Services;
 
+/// <summary>
+/// Реализация S3 хранилища.
+/// </summary>
 public class S3FileStorage : IS3FileStorage
 {
     private readonly IAmazonS3 _s3Client;
@@ -14,7 +17,8 @@ public class S3FileStorage : IS3FileStorage
         _logger = logger;
     }
 
-    public async Task UploadFileAsync(string bucketName, string key, byte[] content)
+    /// <inheritdoc />
+    public async Task EnsureBucketExistsAsync(string bucketName)
     {
         try
         {
@@ -22,7 +26,22 @@ public class S3FileStorage : IS3FileStorage
             if (!bucketExists)
             {
                 await _s3Client.PutBucketAsync(new PutBucketRequest { BucketName = bucketName });
+                _logger.LogInformation("Создан бакет {BucketName}", bucketName);
             }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка при создании бакета {BucketName}", bucketName);
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task UploadFileAsync(string bucketName, string key, byte[] content)
+    {
+        try
+        {
+            await EnsureBucketExistsAsync(bucketName);
 
             using var stream = new MemoryStream(content);
             await _s3Client.PutObjectAsync(new PutObjectRequest
@@ -39,6 +58,25 @@ public class S3FileStorage : IS3FileStorage
         {
             _logger.LogError(ex, "Ошибка загрузки файла {Key}", key);
             throw;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> FileExistsAsync(string bucketName, string key)
+    {
+        try
+        {
+            await _s3Client.GetObjectMetadataAsync(bucketName, key);
+            return true;
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка при проверке файла {Key}", key);
+            return false;
         }
     }
 }

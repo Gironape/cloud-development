@@ -26,7 +26,7 @@ public class EmployeeController(
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<Employee>> GetEmployee(int id, CancellationToken cancellationToken)
+    public async Task<ActionResult<Employee>> GetEmployee([FromQuery] int id, CancellationToken cancellationToken)
     {
         try
         {

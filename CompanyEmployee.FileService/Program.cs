@@ -1,10 +1,10 @@
 using Amazon.S3;
+using Amazon.SimpleNotificationService;
+using Amazon.SQS;
 using CompanyEmployee.FileService.Consumers;
 using CompanyEmployee.FileService.Services;
 using CompanyEmployee.ServiceDefaults;
 using MassTransit;
-using Amazon.SimpleNotificationService;
-using Amazon.SQS;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -41,13 +41,36 @@ builder.Services.AddMassTransit(x =>
             h.SecretKey(awsSecretKey);
         });
 
-        cfg.ConfigureEndpoints(context);
+        cfg.ReceiveEndpoint("employee-events", e =>
+        {
+            e.ConfigureConsumer<EmployeeGeneratedConsumer>(context);
+        });
     });
 });
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var storage = scope.ServiceProvider.GetRequiredService<IS3FileStorage>();
+    await storage.EnsureBucketExistsAsync(bucketName);
+}
+
 app.MapDefaultEndpoints();
 app.MapGet("/health", () => "Healthy");
+
+app.MapGet("/api/files/exists/{fileName}", async (string fileName, IS3FileStorage storage, IConfiguration config) =>
+{
+    try
+    {
+        var bucket = config["S3:BucketName"] ?? "employee-data";
+        var exists = await storage.FileExistsAsync(bucket, fileName);
+        return exists ? Results.Ok() : Results.NotFound();
+    }
+    catch
+    {
+        return Results.NotFound();
+    }
+});
 
 app.Run();
