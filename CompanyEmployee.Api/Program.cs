@@ -1,34 +1,42 @@
 ﻿using Amazon.SimpleNotificationService;
+using Amazon.SQS;
 using CompanyEmployee.Api.Services;
 using CompanyEmployee.ServiceDefaults;
+using MassTransit;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 builder.AddRedisDistributedCache("redis");
 
-builder.Services.Configure<SnsSettings>(builder.Configuration.GetSection("SNS"));
+builder.Services.AddSingleton<IEmployeeGenerator, EmployeeGenerator>();
+builder.Services.AddSingleton<ICacheService, RedisCacheService>();
+builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 
-var snsConfig = new AmazonSimpleNotificationServiceConfig
+var awsServiceUrl = builder.Configuration["AWS:ServiceURL"] ?? "http://localhost:4566";
+var awsRegion = builder.Configuration["AWS:Region"] ?? "us-east-1";
+var awsAccessKey = builder.Configuration["AWS:AccessKeyId"] ?? "test";
+var awsSecretKey = builder.Configuration["AWS:SecretAccessKey"] ?? "test";
+
+builder.Services.AddMassTransit(x =>
 {
-    ServiceURL = builder.Configuration["AWS:ServiceURL"] ?? "http://localhost:4566",
-    AuthenticationRegion = builder.Configuration["AWS:Region"] ?? "us-east-1",
-    UseHttp = true
-};
+    x.UsingAmazonSqs((context, cfg) =>
+    {
+        cfg.Host(awsRegion, h =>
+        {
+            h.Config(new AmazonSQSConfig { ServiceURL = awsServiceUrl });
+            h.Config(new AmazonSimpleNotificationServiceConfig { ServiceURL = awsServiceUrl });
+            h.AccessKey(awsAccessKey);
+            h.SecretKey(awsSecretKey);
+        });
+    });
+});
 
-builder.Services.AddSingleton<IAmazonSimpleNotificationService>(sp =>
-    new AmazonSimpleNotificationServiceClient(
-        builder.Configuration["AWS:AccessKeyId"] ?? "test",
-        builder.Configuration["AWS:SecretAccessKey"] ?? "test",
-        snsConfig));
+builder.Services.AddSingleton<IPublishEndpoint>(sp => sp.GetRequiredService<IBusControl>());
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
-builder.Services.AddSingleton<IEmployeeGenerator, EmployeeGenerator>();
-builder.Services.AddSingleton<ICacheService, RedisCacheService>();
-builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 
 var app = builder.Build();
 
@@ -42,4 +50,5 @@ app.MapDefaultEndpoints();
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
+
 app.Run();

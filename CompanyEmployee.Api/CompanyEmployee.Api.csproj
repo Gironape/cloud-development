@@ -8,8 +8,8 @@
 
   <ItemGroup>
     <PackageReference Include="Aspire.StackExchange.Redis.DistributedCaching" Version="9.5.0" />
-    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="4.0.2.24" />
     <PackageReference Include="Bogus" Version="35.6.5" />
+    <PackageReference Include="MassTransit.AmazonSQS" Version="8.3.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 

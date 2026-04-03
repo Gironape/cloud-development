@@ -1,20 +1,20 @@
 using Amazon.S3;
-using Amazon.SimpleNotificationService;
-using Amazon.SQS;
 using CompanyEmployee.FileService.Consumers;
 using CompanyEmployee.FileService.Services;
 using CompanyEmployee.ServiceDefaults;
 using MassTransit;
+using Amazon.SimpleNotificationService;
+using Amazon.SQS;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-var awsServiceUrl = builder.Configuration["Aws:ServiceUrl"] ?? "http://localhost:4566";
-var awsRegion = builder.Configuration["Aws:Region"] ?? "us-east-1";
-var awsAccessKey = builder.Configuration["Aws:AccessKey"] ?? "test";
-var awsSecretKey = builder.Configuration["Aws:SecretKey"] ?? "test";
-var bucketName = builder.Configuration["Aws:BucketName"] ?? "employee-data";
+var awsServiceUrl = builder.Configuration["AWS:ServiceURL"] ?? "http://localhost:4566";
+var awsRegion = builder.Configuration["AWS:Region"] ?? "us-east-1";
+var awsAccessKey = builder.Configuration["AWS:AccessKeyId"] ?? "test";
+var awsSecretKey = builder.Configuration["AWS:SecretAccessKey"] ?? "test";
+var bucketName = builder.Configuration["S3:BucketName"] ?? "employee-data";
 
 builder.Services.AddSingleton<IAmazonS3>(_ => new AmazonS3Client(
     awsAccessKey, awsSecretKey,
