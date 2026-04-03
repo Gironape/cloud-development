@@ -5,6 +5,9 @@ using MassTransit;
 
 namespace CompanyEmployee.Api.Services;
 
+/// <summary>
+/// Сервис для работы с сотрудниками.
+/// </summary>
 public class EmployeeService : IEmployeeService
 {
     private readonly IEmployeeGenerator _generator;
