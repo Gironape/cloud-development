@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -8,8 +8,8 @@
 
   <ItemGroup>
     <PackageReference Include="Aspire.StackExchange.Redis.DistributedCaching" Version="9.5.0" />
+    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.400.26" />
     <PackageReference Include="Bogus" Version="35.6.5" />
-    <PackageReference Include="MassTransit.AmazonSQS" Version="8.3.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 

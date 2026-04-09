@@ -1,7 +1,6 @@
 ﻿using System.Text.Json;
 using CompanyEmployee.Domain.Entity;
 using Microsoft.Extensions.Caching.Distributed;
-using MassTransit;
 
 namespace CompanyEmployee.Api.Services;
 
@@ -10,12 +9,12 @@ namespace CompanyEmployee.Api.Services;
 /// </summary>
 /// <param name="generator">Генератор сотрудников.</param>
 /// <param name="cache">Кэш Redis.</param>
-/// <param name="publishEndpoint">Endpoint для отправки сообщений в SNS.</param>
+/// <param name="snsPublisher">Публикатор SNS.</param>
 /// <param name="logger">Логгер.</param>
 public class EmployeeService(
     IEmployeeGenerator generator,
     IDistributedCache cache,
-    IPublishEndpoint publishEndpoint,
+    SnsPublisherService snsPublisher,
     ILogger<EmployeeService> logger) : IEmployeeService
 {
     private readonly DistributedCacheEntryOptions _cacheOptions = new()
@@ -23,7 +22,6 @@ public class EmployeeService(
         AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
     };
 
-    /// <inheritdoc />
     public async Task<Employee?> GetEmployeeAsync(int id, CancellationToken cancellationToken = default)
     {
         var cacheKey = $"employee:{id}";
@@ -61,12 +59,11 @@ public class EmployeeService(
             await cache.SetStringAsync(cacheKey, serialized, _cacheOptions, cancellationToken);
             logger.LogDebug("Сотрудник с ID {Id} сохранён в кэш", id);
 
-            await publishEndpoint.Publish(employee, cancellationToken);
-            logger.LogInformation("Сообщение о сотруднике {Id} отправлено в SNS", id);
+            await snsPublisher.PublishEmployeeAsync(employee, cancellationToken);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Не удалось отправить сообщение о сотруднике {Id}", id);
+            logger.LogWarning(ex, "Не удалось отправить сотрудника {Id} в SNS", id);
         }
 
         return employee;

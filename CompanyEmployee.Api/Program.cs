@@ -1,8 +1,6 @@
 ﻿using Amazon.SimpleNotificationService;
-using Amazon.SQS;
 using CompanyEmployee.Api.Services;
 using CompanyEmployee.ServiceDefaults;
-using MassTransit;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,21 +16,17 @@ var awsRegion = builder.Configuration["AWS:Region"] ?? "us-east-1";
 var awsAccessKey = builder.Configuration["AWS:AccessKeyId"] ?? "test";
 var awsSecretKey = builder.Configuration["AWS:SecretAccessKey"] ?? "test";
 
-builder.Services.AddMassTransit(x =>
+var snsConfig = new AmazonSimpleNotificationServiceConfig
 {
-    x.UsingAmazonSqs((context, cfg) =>
-    {
-        cfg.Host(awsRegion, h =>
-        {
-            h.Config(new AmazonSQSConfig { ServiceURL = awsServiceUrl });
-            h.Config(new AmazonSimpleNotificationServiceConfig { ServiceURL = awsServiceUrl });
-            h.AccessKey(awsAccessKey);
-            h.SecretKey(awsSecretKey);
-        });
-    });
-});
+    ServiceURL = awsServiceUrl,
+    AuthenticationRegion = awsRegion,
+    UseHttp = true
+};
 
-builder.Services.AddSingleton<IPublishEndpoint>(sp => sp.GetRequiredService<IBusControl>());
+builder.Services.AddSingleton<IAmazonSimpleNotificationService>(_ =>
+    new AmazonSimpleNotificationServiceClient(awsAccessKey, awsSecretKey, snsConfig));
+
+builder.Services.AddSingleton<SnsPublisherService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
