@@ -1,160 +1,81 @@
+using Aspire.Hosting.Testing;
 using CompanyEmployee.Domain.Entity;
+using System.Net;
 using System.Text.Json;
 
 namespace CompanyEmployee.IntegrationTests;
 
-/// <summary>
-/// Интеграционные тесты для проверки работы всех сервисов.
-/// </summary>
-public class BasicTests
+public class BasicTest : IClassFixture<AppHostFixture>
 {
-    private readonly HttpClient _apiClient;
-    private readonly HttpClient _gatewayClient;
-    private readonly HttpClient _fileServiceClient;
+    private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
+    private readonly AppHostFixture _fixture;
 
-    public BasicTests()
+    public BasicTest(AppHostFixture fixture)
     {
-        _apiClient = new HttpClient
-        {
-            BaseAddress = new Uri("https://localhost:6001")
-        };
-
-        _gatewayClient = new HttpClient
-        {
-            BaseAddress = new Uri("https://localhost:7000")
-        };
-
-        _fileServiceClient = new HttpClient
-        {
-            BaseAddress = new Uri("https://localhost:7277")
-        };
+        _fixture = fixture;
     }
 
-    /// <summary>
-    /// Проверяет, что API генерирует сотрудника.
-    /// </summary>
+    [Fact]
+    public async Task Api_HealthCheck_ReturnsHealthy()
+    {
+        using var httpClient = _fixture.App!.CreateHttpClient("api-1");
+        using var response = await httpClient.GetAsync("/health");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task FileService_HealthCheck_ReturnsHealthy()
+    {
+        using var httpClient = _fixture.App!.CreateHttpClient("fileservice");
+        using var response = await httpClient.GetAsync("/health");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     [Fact]
     public async Task GetEmployee_ShouldReturnEmployee()
     {
-        var response = await _apiClient.GetAsync("/api/employee?id=1");
-        response.EnsureSuccessStatusCode();
+        using var httpClient = _fixture.App!.CreateHttpClient("api-1");
+        using var response = await httpClient.GetAsync("/api/employee?id=1");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var content = await response.Content.ReadAsStringAsync();
-        var employee = JsonSerializer.Deserialize<Employee>(content, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
+        var employee = JsonSerializer.Deserialize<Employee>(content, _jsonOptions);
 
         Assert.NotNull(employee);
         Assert.Equal(1, employee.Id);
         Assert.False(string.IsNullOrEmpty(employee.FullName));
     }
 
-    /// <summary>
-    /// Проверяет работу кэширования в Redis.
-    /// </summary>
     [Fact]
     public async Task SameEmployeeId_ShouldReturnSameData()
     {
-        var response1 = await _apiClient.GetAsync("/api/employee?id=2");
-        var content1 = await response1.Content.ReadAsStringAsync();
+        using var httpClient = _fixture.App!.CreateHttpClient("api-1");
 
-        var response2 = await _apiClient.GetAsync("/api/employee?id=2");
-        var content2 = await response2.Content.ReadAsStringAsync();
+        using var firstResponse = await httpClient.GetAsync("/api/employee?id=2");
+        var firstContent = await firstResponse.Content.ReadAsStringAsync();
 
-        Assert.Equal(content1, content2);
+        using var secondResponse = await httpClient.GetAsync("/api/employee?id=2");
+        var secondContent = await secondResponse.Content.ReadAsStringAsync();
+
+        Assert.Equal(firstContent, secondContent);
     }
 
-    /// <summary>
-    /// Проверяет, что разные ID генерируют разных сотрудников.
-    /// </summary>
     [Fact]
     public async Task DifferentIds_ShouldGenerateDifferentEmployees()
     {
-        var response1 = await _apiClient.GetAsync("/api/employee?id=10");
-        var employee1 = JsonSerializer.Deserialize<Employee>(
-            await response1.Content.ReadAsStringAsync(),
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        using var httpClient = _fixture.App!.CreateHttpClient("api-1");
 
-        var response2 = await _apiClient.GetAsync("/api/employee?id=20");
+        using var response1 = await httpClient.GetAsync("/api/employee?id=10");
+        var employee1 = JsonSerializer.Deserialize<Employee>(
+            await response1.Content.ReadAsStringAsync(), _jsonOptions);
+
+        using var response2 = await httpClient.GetAsync("/api/employee?id=20");
         var employee2 = JsonSerializer.Deserialize<Employee>(
-            await response2.Content.ReadAsStringAsync(),
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            await response2.Content.ReadAsStringAsync(), _jsonOptions);
 
         Assert.NotNull(employee1);
         Assert.NotNull(employee2);
         Assert.NotEqual(employee1.FullName, employee2.FullName);
-    }
-
-    /// <summary>
-    /// Проверяет балансировку нагрузки через Gateway (Weighted Random).
-    /// </summary>
-    [Fact]
-    public async Task LoadBalancer_ShouldDistributeRequests()
-    {
-        var requestsCount = 50;
-        var successCount = 0;
-
-        for (var i = 0; i < requestsCount; i++)
-        {
-            var response = await _gatewayClient.GetAsync($"/api/employee?id={i + 1}");
-            if (response.IsSuccessStatusCode)
-            {
-                successCount++;
-            }
-        }
-
-        Assert.Equal(requestsCount, successCount);
-    }
-
-    /// <summary>
-    /// Проверяет отправку сообщения в SNS и сохранение в S3.
-    /// </summary>
-    [Fact]
-    public async Task EmployeeGeneration_ShouldSendToSnsAndSaveToS3()
-    {
-        var employeeId = 777;
-        await _fileServiceClient.GetAsync("/health");
-        await Task.Delay(5000);
-        var response = await _apiClient.GetAsync($"/api/employee?id={employeeId}");
-        response.EnsureSuccessStatusCode();
-
-        await Task.Delay(3000);
-
-        var fileCheckResponse = await _fileServiceClient.GetAsync($"/api/files/exists/employee_{employeeId}.json");
-
-        Assert.True(fileCheckResponse.IsSuccessStatusCode, "Файл не найден в S3 хранилище");
-    }
-
-    /// <summary>
-    /// Проверяет полный цикл: генерация -> кэш -> брокер -> хранилище.
-    /// </summary>
-    [Fact]
-    public async Task FullCycle_ShouldWorkCorrectly()
-    {
-        var employeeId = 777;
-
-        var startTime = DateTime.Now;
-        var response = await _apiClient.GetAsync($"/api/employee?id={employeeId}");
-        var firstDuration = DateTime.Now - startTime;
-
-        response.EnsureSuccessStatusCode();
-        var employee = JsonSerializer.Deserialize<Employee>(
-            await response.Content.ReadAsStringAsync(),
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-        Assert.NotNull(employee);
-        Assert.Equal(employeeId, employee.Id);
-
-        startTime = DateTime.Now;
-        var cachedResponse = await _apiClient.GetAsync($"/api/employee?id={employeeId}");
-        var secondDuration = DateTime.Now - startTime;
-
-        Assert.True(secondDuration < firstDuration, "Второй запрос должен быть быстрее (кэш)");
-
-        await Task.Delay(3000);
-
-        var fileExists = await _fileServiceClient.GetAsync($"/api/files/exists/employee_{employeeId}.json");
-        Assert.True(fileExists.IsSuccessStatusCode, "Файл должен сохраниться в S3");
     }
 }

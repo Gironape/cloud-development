@@ -6,6 +6,7 @@ var redis = builder.AddRedis("redis")
     .WithRedisCommander();
 
 var minio = builder.AddContainer("minio", "minio/minio")
+    .WithVolume("minio-data", "/data")
     .WithArgs("server", "/data", "--console-address", ":9001")
     .WithEnvironment("MINIO_ROOT_USER", "minioadmin")
     .WithEnvironment("MINIO_ROOT_PASSWORD", "minioadmin")
