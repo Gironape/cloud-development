@@ -10,50 +10,48 @@ var minio = builder.AddContainer("minio", "minio/minio")
     .WithArgs("server", "/data", "--console-address", ":9001")
     .WithEnvironment("MINIO_ROOT_USER", "minioadmin")
     .WithEnvironment("MINIO_ROOT_PASSWORD", "minioadmin")
-    .WithEndpoint(port: 9000, targetPort: 9000, name: "api", scheme: "http")
-    .WithEndpoint(port: 9001, targetPort: 9001, name: "console", scheme: "http");
+    .WithEndpoint(port: 9000, targetPort: 9000, scheme: "http", name: "minio-api")
+    .WithEndpoint(port: 9001, targetPort: 9001, scheme: "http", name: "minio-console");
 
 var localstack = builder.AddContainer("localstack", "localstack/localstack:3.8.0")
-    .WithEndpoint(port: 4566, targetPort: 4566, name: "localstack", scheme: "http")
+    .WithEndpoint(port: 4566, targetPort: 4566, scheme: "http", name: "localstack")
     .WithEnvironment("SERVICES", "sns")
     .WithEnvironment("AWS_ACCESS_KEY_ID", "test")
     .WithEnvironment("AWS_SECRET_ACCESS_KEY", "test")
-    .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1");
+    .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1")
+    .WithEnvironment("SKIP_SSL_CERT_DOWNLOAD", "1")
+    .WithEnvironment("LOCALSTACK_HOST", "localhost.localstack.cloud")
+    .WithLifetime(ContainerLifetime.Persistent);
+
+var fileService = builder.AddProject<Projects.CompanyEmployee_FileService>("fileservice")
+    .WithEnvironment("MinIO__Endpoint", "http://localhost:9000")
+    .WithEnvironment("MinIO__AccessKey", "minioadmin")
+    .WithEnvironment("MinIO__SecretKey", "minioadmin")
+    .WithEnvironment("MinIO__BucketName", "employee-data")
+    .WaitFor(minio)
+    .WaitFor(localstack);
 
 var gateway = builder.AddProject<Projects.CompanyEmployee_Gateway>("gateway")
-    .WithEndpoint("https", e => e.Port = 7000)
     .WithExternalHttpEndpoints();
 
-const int startApiPort = 6001;
+const int startApiHttpsPort = 6001;
 const int replicaCount = 5;
 var apiReplicas = new List<IResourceBuilder<ProjectResource>>();
 
 for (var i = 0; i < replicaCount; i++)
 {
-    var port = startApiPort + i;
+    var httpsPort = startApiHttpsPort + i;
+
     var api = builder.AddProject<Projects.CompanyEmployee_Api>($"api-{i + 1}")
         .WithReference(redis)
-        .WithEndpoint("https", e => e.Port = port)
+        .WithEndpoint("https", e => e.Port = httpsPort)
         .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
-        .WithEnvironment("AWS__ServiceURL", "http://localhost:4566")
-        .WithEnvironment("AWS__Region", "us-east-1")
-        .WithEnvironment("AWS__AccessKeyId", "test")
-        .WithEnvironment("AWS__SecretAccessKey", "test")
-        .WithEnvironment("SNS__TopicArn", "arn:aws:sns:us-east-1:000000000000:employee-events")
         .WaitFor(redis)
         .WaitFor(localstack);
 
     apiReplicas.Add(api);
     gateway.WaitFor(api);
 }
-
-var fileService = builder.AddProject<Projects.CompanyEmployee_FileService>("fileservice")
-    .WaitFor(minio)
-    .WaitFor(localstack)
-    .WithEnvironment("MinIO__Endpoint", "http://localhost:9000")
-    .WithEnvironment("MinIO__AccessKey", "minioadmin")
-    .WithEnvironment("MinIO__SecretKey", "minioadmin")
-    .WithEnvironment("MinIO__BucketName", "employee-data");
 
 foreach (var replica in apiReplicas)
 {

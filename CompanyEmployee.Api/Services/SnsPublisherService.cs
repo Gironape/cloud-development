@@ -1,71 +1,84 @@
-﻿using Amazon.SimpleNotificationService;
+﻿using System.Text.Json;
+using Amazon.SimpleNotificationService;
 using Amazon.SimpleNotificationService.Model;
 using CompanyEmployee.Domain.Entity;
-using System.Text.Json;
 
 namespace CompanyEmployee.Api.Services;
 
 /// <summary>
-/// Сервис для публикации сообщений в SNS.
+/// Сервис для публикации сообщений о сотрудниках в SNS.
 /// </summary>
-/// <param name="snsClient">SNS клиент.</param>
-/// <param name="configuration">Конфигурация.</param>
-/// <param name="logger">Логгер.</param>
 public class SnsPublisherService(
     IAmazonSimpleNotificationService snsClient,
     IConfiguration configuration,
     ILogger<SnsPublisherService> logger)
 {
-    private readonly string? _topicArn = configuration["SNS:TopicArn"] ?? "arn:aws:sns:us-east-1:000000000000:employee-events";
+    private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
 
+    private readonly string _topicArn = configuration["SNS:TopicArn"]
+        ?? "arn:aws:sns:us-east-1:000000000000:employee-events";
+
+    /// <summary>
+    /// Публикует данные сотрудника в SNS топик.
+    /// </summary>
     public async Task PublishEmployeeAsync(Employee employee, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(_topicArn))
-        {
-            logger.LogWarning("SNS TopicArn не настроен, публикация пропущена");
-            return;
-        }
-
         try
         {
-            var message = JsonSerializer.Serialize(employee);
+            logger.LogDebug("Publishing employee {EmployeeId} to SNS topic {TopicArn}", employee.Id, _topicArn);
+
+            var message = JsonSerializer.Serialize(employee, _jsonOptions);
             var publishRequest = new PublishRequest
             {
                 TopicArn = _topicArn,
                 Message = message,
                 Subject = $"Employee-{employee.Id}"
             };
+
             var response = await snsClient.PublishAsync(publishRequest, cancellationToken);
-            logger.LogInformation("Сотрудник {Id} опубликован в SNS, MessageId: {MessageId}", employee.Id, response.MessageId);
+            logger.LogInformation("Employee {EmployeeId} published to SNS, MessageId: {MessageId}",
+                employee.Id, response.MessageId);
         }
         catch (NotFoundException)
         {
-            logger.LogWarning("Топик SNS не существует, попытка создать");
-            try
-            {
-                var createTopicRequest = new CreateTopicRequest { Name = "employee-events" };
-                var createResponse = await snsClient.CreateTopicAsync(createTopicRequest, cancellationToken);
-                var createdTopicArn = createResponse.TopicArn;
-                logger.LogInformation("Топик SNS создан: {TopicArn}", createdTopicArn);
-
-                var message = JsonSerializer.Serialize(employee);
-                var publishRequest = new PublishRequest
-                {
-                    TopicArn = createdTopicArn,
-                    Message = message,
-                    Subject = $"Employee-{employee.Id}"
-                };
-                var response = await snsClient.PublishAsync(publishRequest, cancellationToken);
-                logger.LogInformation("Сотрудник {Id} опубликован в SNS после создания топика, MessageId: {MessageId}", employee.Id, response.MessageId);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Не удалось создать топик SNS и опубликовать сообщение");
-            }
+            logger.LogWarning("SNS topic not found, attempting to create topic");
+            await TryCreateTopicAndPublishAsync(employee, cancellationToken);
+        }
+        catch (TaskCanceledException ex)
+        {
+            logger.LogError(ex, "SNS request timed out for employee {EmployeeId}", employee.Id);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Ошибка при публикации в SNS");
+            logger.LogError(ex, "Failed to publish employee {EmployeeId} to SNS", employee.Id);
+        }
+    }
+
+    private async Task TryCreateTopicAndPublishAsync(Employee employee, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var createTopicRequest = new CreateTopicRequest { Name = "employee-events" };
+            var createResponse = await snsClient.CreateTopicAsync(createTopicRequest, cancellationToken);
+            var createdTopicArn = createResponse.TopicArn;
+
+            logger.LogInformation("SNS topic created: {TopicArn}", createdTopicArn);
+
+            var message = JsonSerializer.Serialize(employee, _jsonOptions);
+            var publishRequest = new PublishRequest
+            {
+                TopicArn = createdTopicArn,
+                Message = message,
+                Subject = $"Employee-{employee.Id}"
+            };
+
+            var response = await snsClient.PublishAsync(publishRequest, cancellationToken);
+            logger.LogInformation("Employee {EmployeeId} published after topic creation, MessageId: {MessageId}",
+                employee.Id, response.MessageId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to create SNS topic and publish employee {EmployeeId}", employee.Id);
         }
     }
 }

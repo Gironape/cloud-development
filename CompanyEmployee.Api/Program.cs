@@ -13,8 +13,6 @@ builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 
 var awsServiceUrl = builder.Configuration["AWS:ServiceURL"] ?? "http://localhost:4566";
 var awsRegion = builder.Configuration["AWS:Region"] ?? "us-east-1";
-var awsAccessKey = builder.Configuration["AWS:AccessKeyId"] ?? "test";
-var awsSecretKey = builder.Configuration["AWS:SecretAccessKey"] ?? "test";
 
 var snsConfig = new AmazonSimpleNotificationServiceConfig
 {
@@ -24,7 +22,7 @@ var snsConfig = new AmazonSimpleNotificationServiceConfig
 };
 
 builder.Services.AddSingleton<IAmazonSimpleNotificationService>(_ =>
-    new AmazonSimpleNotificationServiceClient(awsAccessKey, awsSecretKey, snsConfig));
+    new AmazonSimpleNotificationServiceClient("test", "test", snsConfig));
 
 builder.Services.AddSingleton<SnsPublisherService>();
 
@@ -41,7 +39,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapDefaultEndpoints();
-app.UseHttpsRedirection();
+
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseHttpsRedirection();
+}
+
 app.UseAuthorization();
 app.MapControllers();
 

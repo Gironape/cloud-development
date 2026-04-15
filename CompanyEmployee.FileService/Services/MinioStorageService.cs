@@ -4,14 +4,13 @@ using Minio.DataModel.Args;
 namespace CompanyEmployee.FileService.Services;
 
 /// <summary>
-/// Реализация хранилища через MinIO.
+/// Реализация хранилища через MinIO с использованием первичного конструктора.
 /// </summary>
-/// <param name="minioClient">Клиент MinIO.</param>
-/// <param name="logger">Логгер.</param>
 public class MinioStorageService(
     IMinioClient minioClient,
     ILogger<MinioStorageService> logger) : IStorageService
 {
+    /// <inheritdoc/>
     public async Task SaveFileAsync(string bucketName, string key, byte[] content)
     {
         try
@@ -20,7 +19,7 @@ public class MinioStorageService(
             if (!bucketExists)
             {
                 await minioClient.MakeBucketAsync(new MakeBucketArgs().WithBucket(bucketName));
-                logger.LogInformation("Создан бакет {BucketName}", bucketName);
+                logger.LogInformation("Created bucket {BucketName}", bucketName);
             }
 
             using var stream = new MemoryStream(content);
@@ -31,15 +30,16 @@ public class MinioStorageService(
                 .WithObjectSize(stream.Length)
                 .WithContentType("application/json"));
 
-            logger.LogInformation("Файл {Key} загружен в MinIO", key);
+            logger.LogInformation("File {Key} uploaded to MinIO successfully", key);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Ошибка загрузки файла {Key}", key);
+            logger.LogError(ex, "Failed to upload file {Key} to bucket {BucketName}", key, bucketName);
             throw;
         }
     }
 
+    /// <inheritdoc/>
     public async Task<bool> FileExistsAsync(string bucketName, string key)
     {
         try
@@ -49,13 +49,19 @@ public class MinioStorageService(
                 .WithObject(key));
             return true;
         }
+        catch (Minio.Exceptions.ObjectNotFoundException)
+        {
+            logger.LogDebug("File {Key} not found in bucket {BucketName}", key, bucketName);
+            return false;
+        }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Ошибка при проверке файла {Key}", key);
+            logger.LogWarning(ex, "Error checking file existence for {Key} in bucket {BucketName}", key, bucketName);
             return false;
         }
     }
 
+    /// <inheritdoc/>
     public async Task<IEnumerable<string>> ListFilesAsync(string bucketName)
     {
         var files = new List<string>();
@@ -70,16 +76,17 @@ public class MinioStorageService(
                 files.Add(item.Key);
             }
 
-            logger.LogInformation("Получен список файлов из бакета {BucketName}, найдено {Count} файлов", bucketName, files.Count);
+            logger.LogInformation("Retrieved {Count} files from bucket {BucketName}", files.Count, bucketName);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Ошибка при получении списка файлов из бакета {BucketName}", bucketName);
+            logger.LogError(ex, "Failed to list files from bucket {BucketName}", bucketName);
         }
         return files;
     }
 
-    public async Task<byte[]> GetFileAsync(string bucketName, string key)
+    /// <inheritdoc/>
+    public async Task<byte[]?> GetFileAsync(string bucketName, string key)
     {
         try
         {
@@ -90,16 +97,22 @@ public class MinioStorageService(
                 .WithCallbackStream(stream => stream.CopyTo(memoryStream));
 
             await minioClient.GetObjectAsync(args);
-            logger.LogInformation("Файл {Key} загружен из MinIO", key);
+            logger.LogInformation("File {Key} downloaded from MinIO successfully", key);
             return memoryStream.ToArray();
+        }
+        catch (Minio.Exceptions.ObjectNotFoundException)
+        {
+            logger.LogWarning("File {Key} not found in bucket {BucketName}", key, bucketName);
+            return null;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Ошибка при получении файла {Key}", key);
+            logger.LogError(ex, "Failed to download file {Key} from bucket {BucketName}", key, bucketName);
             return null;
         }
     }
 
+    /// <inheritdoc/>
     public async Task<FileMetadata?> GetFileMetadataAsync(string bucketName, string key)
     {
         try
@@ -111,9 +124,14 @@ public class MinioStorageService(
             var stat = await minioClient.StatObjectAsync(args);
             return new FileMetadata(key, stat.Size, stat.LastModified);
         }
+        catch (Minio.Exceptions.ObjectNotFoundException)
+        {
+            logger.LogDebug("File metadata not found for {Key} in bucket {BucketName}", key, bucketName);
+            return null;
+        }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Ошибка при получении метаданных файла {Key}", key);
+            logger.LogWarning(ex, "Failed to get metadata for file {Key} in bucket {BucketName}", key, bucketName);
             return null;
         }
     }
